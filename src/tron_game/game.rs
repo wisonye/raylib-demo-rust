@@ -1,4 +1,4 @@
-use crate::game_trait::Game;
+use crate::game_trait::{DrawGame, GameLogic, InitGame, Raylib};
 use raylib::prelude::*;
 
 const SCREEN_WIDTH: i32 = 800;
@@ -50,15 +50,81 @@ struct Player {
 ///
 pub struct TronGame {
     // Raylib handle
-    rl: RaylibHandle,
+    rl_handle: RaylibHandle,
     // Raylib thread
-    rt: RaylibThread,
+    rl_thread: RaylibThread,
     background: Option<Texture2D>,
     player: Player,
 }
 
+
 ///
-impl TronGame {
+impl InitGame for TronGame {
+    ///
+    ///
+    ///
+    fn init_game() -> Self {
+        // Player center in window
+        let player = Player {
+            x: (SCREEN_WIDTH / 2) as f32,
+            y: (SCREEN_HEIGHT / 2) as f32,
+            vision_direction: PlayerVisionDirection::UNKNOWN,
+        };
+
+        // Init window
+        let (rl_handle, rl_thread) = raylib::init()
+            // .fullscreen()
+            // .resizable()
+            // .undecorated()
+            // .transparent()
+            // .vsync()
+            .size(SCREEN_WIDTH, SCREEN_HEIGHT)
+            .title("Raylib Tron Game")
+            .build();
+
+        // Set tracing log level
+        set_trace_log(TraceLogLevel::LOG_DEBUG);
+
+        let mut game = Self {
+            rl_handle,
+            rl_thread,
+            background: None,
+            player,
+        };
+
+        // Set render FPS: run at 60 frames-per-second
+        game.rl_handle.set_target_fps(60);
+
+        // Load background
+        match game
+            .rl_handle
+            .load_texture(&game.rl_thread, "src/tron_game/res/bg.png")
+        {
+            Ok(texture) => game.background = Some(texture),
+            Err(error) => trace_log(
+                TraceLogLevel::LOG_ERROR,
+                &format!("Error when loading background: {error}"),
+            ),
+        };
+
+        game
+    }
+}
+
+///
+impl Raylib for TronGame {
+    // Raylib handle
+    fn get_handle(&self) -> &RaylibHandle {
+        &self.rl_handle
+    }
+    // Raylib thread
+    fn get_thread(&self) -> &RaylibThread {
+        &self.rl_thread
+    }
+}
+
+///
+impl GameLogic for TronGame {
     ///
     /// Game logic:
     ///
@@ -66,7 +132,7 @@ impl TronGame {
         //
         // Moving by vim keybingind
         //
-        if self.rl.is_key_down(KeyboardKey::KEY_H) {
+        if self.rl_handle.is_key_down(KeyboardKey::KEY_H) {
             trace_log(TraceLogLevel::LOG_DEBUG, "Move left");
 
             self.player.x -= PLAYER_MOVING_VELOCITY;
@@ -75,7 +141,7 @@ impl TronGame {
             if self.player.x < PLAYER_CIRCLE_RADIUS {
                 self.player.x = PLAYER_CIRCLE_RADIUS;
             }
-        } else if self.rl.is_key_down(KeyboardKey::KEY_L) {
+        } else if self.rl_handle.is_key_down(KeyboardKey::KEY_L) {
             trace_log(TraceLogLevel::LOG_DEBUG, "Move right");
             self.player.x += PLAYER_MOVING_VELOCITY;
             self.player.vision_direction = PlayerVisionDirection::EAST;
@@ -83,7 +149,7 @@ impl TronGame {
             if self.player.x + PLAYER_CIRCLE_RADIUS > SCREEN_WIDTH as f32 {
                 self.player.x = SCREEN_WIDTH as f32 - PLAYER_CIRCLE_RADIUS;
             }
-        } else if self.rl.is_key_down(KeyboardKey::KEY_K) {
+        } else if self.rl_handle.is_key_down(KeyboardKey::KEY_K) {
             trace_log(TraceLogLevel::LOG_DEBUG, "Move up");
             self.player.y -= PLAYER_MOVING_VELOCITY;
             self.player.vision_direction = PlayerVisionDirection::NORTH;
@@ -91,7 +157,7 @@ impl TronGame {
             if self.player.y < PLAYER_CIRCLE_RADIUS {
                 self.player.y = PLAYER_CIRCLE_RADIUS;
             }
-        } else if self.rl.is_key_down(KeyboardKey::KEY_J) {
+        } else if self.rl_handle.is_key_down(KeyboardKey::KEY_J) {
             trace_log(TraceLogLevel::LOG_DEBUG, "Move down");
             self.player.y += PLAYER_MOVING_VELOCITY;
             self.player.vision_direction = PlayerVisionDirection::SOUTH;
@@ -101,22 +167,27 @@ impl TronGame {
             }
         }
     }
+}
 
+impl DrawGame for TronGame {
     //
     // Draw game UI
     //
     fn draw_game(&mut self) {
-        let mut dl = self.rl.begin_drawing(&self.rt);
+        //
+        // No need to call `EndDrawing` manually, it will be called when
+        // `RaylibDrawHandler` out of the current scope.
+        //
+        let mut dl = self.rl_handle.begin_drawing(&self.rl_thread);
 
         dl.clear_background(Color::RAYWHITE);
 
         //
-        // Draw background
+        // Draw background on left-top with particular scale
         //
-        let bg_pos = Vector2::new(0.0, 0.0);
         dl.draw_texture_ex(
             self.background.as_ref().unwrap(),
-            bg_pos,
+            Vector2::new(0.0, 0.0),
             0.0,
             0.5,
             Color::RAYWHITE,
@@ -164,80 +235,5 @@ impl TronGame {
             PLAYER_CIRCLE_START_COLOR,
             PLAYER_CIRCLE_END_COLOR,
         );
-    }
-}
-
-///
-impl Game for TronGame {
-    ///
-    ///
-    ///
-    fn init_game() -> Self {
-        // Player center in window
-        let player = Player {
-            x: (SCREEN_WIDTH / 2) as f32,
-            y: (SCREEN_HEIGHT / 2) as f32,
-            vision_direction: PlayerVisionDirection::UNKNOWN,
-        };
-
-        // Init window
-        let (rl, rt) = raylib::init()
-            // .fullscreen()
-            // .resizable()
-            // .undecorated()
-            // .transparent()
-            // .vsync()
-            .size(SCREEN_WIDTH, SCREEN_HEIGHT)
-            .title("Raylib Tron Game")
-            .build();
-
-        // Set tracing log level
-        set_trace_log(TraceLogLevel::LOG_DEBUG);
-
-        let mut game = Self {
-            rl,
-            rt,
-            background: None,
-            player,
-        };
-
-        // Set render FPS: run at 60 frames-per-second
-        game.rl.set_target_fps(60);
-
-        // Load background
-        match game.rl.load_texture(&game.rt, "src/tron_game/res/bg.png") {
-            Ok(texture) => game.background = Some(texture),
-            Err(error) => trace_log(
-                TraceLogLevel::LOG_ERROR,
-                &format!("Error when loading background: {error}"),
-            ),
-        };
-
-        game
-    }
-
-    ///
-    ///
-    ///
-    fn run(&mut self) -> &mut Self {
-        println!(">>> Tron game is running......");
-
-        //
-        // Main game loop, exit when pressing `ESC` button or close window
-        //
-        while !self.rl.window_should_close() {
-            self.update_tick();
-            self.draw_game();
-        }
-
-        self
-    }
-
-    ///
-    ///
-    ///
-    fn exit(&mut self) -> &mut Self {
-        println!(">>> Tron game is exiting......");
-        self
     }
 }
